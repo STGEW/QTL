@@ -1,3 +1,7 @@
+from consts import MOTOR_MAX_VAL
+from consts import THROTTLE_IDLE_VAL
+from consts import THROTTLE_CUT_OFF_THRESH
+from consts import DISABLE_MOTOR_VALUE
 
 
 class QuadModel:
@@ -23,8 +27,7 @@ class QuadModel:
     D_RATE_YAW = 0
 
     
-    def __init__(self, imu):
-        self._imu = imu
+    def __init__(self):
         self._angle_roll = 0.0
         self._angle_pitch = 0.0
 
@@ -43,25 +46,22 @@ class QuadModel:
         self._prev_err_rate_yaw = 0.0
         self._prev_iterm_rate_yaw = 0.0
 
-    def convert(self, inputs, t):
+    def convert(self, inputs, imu_vals):
         """
         inputs are values from RC
         """
-
         targ_angle_roll = 0.1 * (inputs['1'] - 1500)
         targ_angle_pitch = 0.1 * (inputs['2'] - 1500)
         targ_throttle = inputs['3']
         target_rate_yaw = 0.15 * (inputs['4'] - 1500)
 
-        d = self._imu.read_calib()
+        acc_x = imu_vals['acc']['x']
+        acc_y = imu_vals['acc']['y']
+        acc_z = imu_vals['acc']['z']
 
-        acc_x = d['acc']['x']
-        acc_y = d['acc']['y']
-        acc_z = d['acc']['z']
-
-        gyro_x = d['gyro']['x']
-        gyro_y = d['gyro']['y']
-        gyro_z = d['gyro']['z']
+        gyro_x = imu_vals['gyro']['x']
+        gyro_y = imu_vals['gyro']['y']
+        gyro_z = imu_vals['gyro']['z']
 
         self._angle_roll = atan(acc_y/sqrt(acc_x*acc_x+acc_z*acc_z))*1/(3.142/180);
         self._angle_pitch = -atan(acc_x/sqrt(acc_y*acc_y+acc_z*acc_z))*1/(3.142/180);
@@ -128,16 +128,28 @@ class QuadModel:
         self._prev_err_rate_yaw = res[1]
         self._prev_iterm_rate_yaw = res[2]
 
-        # front right - counter clockwise
-        MotorInput1 = (targ_throttle - target_roll - target_pitch - target_yaw)
-        # rear right - clockwise
-        MotorInput2 = (targ_throttle - target_roll + target_pitch + target_yaw)
-        # rear left  - counter clockwise
-        MotorInput3 = (targ_throttle + target_roll + target_pitch - target_yaw)
-        #front left - clockwise
-        MotorInput4 = (targ_throttle + target_roll - target_pitch + target_yaw)
+        motor_values = {
+            '1': targ_throttle - target_roll - target_pitch - target_yaw,
+            '2': targ_throttle - target_roll + target_pitch + target_yaw,
+            '3': targ_throttle + target_roll + target_pitch - target_yaw,
+            '4': targ_throttle + target_roll - target_pitch + target_yaw
+        }
 
         # limit it within values
+        for i in range(1, 5):
+            j = str(i)
+            if motor_values[j] > MOTOR_MAX_VAL:
+                motor_values[j] = MOTOR_MAX_VAL - 1
+            elif motor_values[j] < THROTTLE_IDLE_VAL:
+                motor_valuesp[j] = THROTTLE_IDLE_VAL
+
+        # cut off all motors
+        if inputs['2'] < THROTTLE_CUT_OFF_THRESH:
+            for i in range(1, 5):
+                j = str(i)
+                motor_values[j] = DISABLE_MOTOR_VALUE
+
+        return motor_values
 
 
     def pid_equation(Error, P, I, D, PrevError, PrevIterm):

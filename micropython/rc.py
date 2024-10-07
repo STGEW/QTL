@@ -1,19 +1,18 @@
 from machine import Pin
 
-from consts import PIN_REC_CH_1, PIN_REC_CH_2, PIN_REC_CH_3
-from consts import PIN_REC_CH_4, PIN_REC_CH_5, PIN_REC_CH_6
-
-
+from consts import PIN_REC
 
 class RC:
 
     def __init__(self):
-        self.ch_1 = Pin(PIN_REC_CH_1, Pin.IN)
-        self.ch_2 = Pin(PIN_REC_CH_2, Pin.IN)
-        self.ch_3 = Pin(PIN_REC_CH_3, Pin.IN)
-        self.ch_4 = Pin(PIN_REC_CH_4, Pin.IN)
-        self.ch_5 = Pin(PIN_REC_CH_5, Pin.IN)
-        self.ch_6 = Pin(PIN_REC_CH_6, Pin.IN)
+        self.ch = {
+            '1': Pin(PIN_REC['1'], Pin.IN),
+            '2': Pin(PIN_REC['2'], Pin.IN),
+            '3': Pin(PIN_REC['3'], Pin.IN),
+            '4': Pin(PIN_REC['4'], Pin.IN),
+            '5': Pin(PIN_REC['5'], Pin.IN),
+            '6': Pin(PIN_REC['6'], Pin.IN)
+        }
 
     def read(self):
         return {
