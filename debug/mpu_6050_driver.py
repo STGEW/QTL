@@ -1,34 +1,44 @@
-IMU_FILE_PATH = '../data/imu.txt'
+import logging
+from consts import DATA_DIR
+
+
+IMU_FILE_PATH = f'../{DATA_DIR}/imu.txt'
+
+
+logger = logging.getLogger(__name__)
 
 
 class MPU6050:
 
     def __init__(self, i2c):
-        data = []
+        self.data = []
         with open(IMU_FILE_PATH, 'r') as f:
-            for l in f.read():
-                data.append(l)
+            self.data = [line.strip() for line in f]
 
     def calibrate(self):
         pass
 
     def read_calib(self):
-        if data:
-            values = data.pop(0).split(' ')
+        if self.data:
+            l = self.data.pop(0)
+            logging.info(f"Data line: '{l}'")
+            values = l.split(' ')
+            logging.info(f"Values: '{values}'")
             values = [float(v) for v in values]
-            data = {
+            d = {
                 'temp': 36.6,
                 'gyro': {
                     'x': values[0],
                     'y': values[1],
                     'z': values[2]
                 },
-                'accel': {
+                'acc': {
                     'x': values[3],
                     'y': values[4],
                     'z': values[5]  
                 }
             }
-            return data
+            logger.info(f"IMU data: '{d}'")
+            return d
         else:
             raise ValueError("No more data from IMU available")
