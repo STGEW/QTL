@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadrotor Visualization</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script>
+
+        const socket = io();
+
+        let scene, camera, renderer, controls, quadrotor, axesHelper;
+        let roll = 0, pitch = 0, yaw = 0;
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 1); // Moves the camera up and back
+            camera.lookAt(new THREE.Vector3(2, 0, -1)); // Points the camera at the origin
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // OrbitControls setup
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            // Create the quadrotor model
+            createQuadrotor();
+
+            // Start the animation loop
+            animate();
+        }
+
+        // Create a simple quadrotor model with sticks and motors
+        function createQuadrotor() {
+            quadrotor = new THREE.Group();
+
+            // Sticks
+            const stickGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.24);
+            const stickFrontMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const stickBackMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+            const frontRightStick = new THREE.Mesh(stickGeometry, stickFrontMaterial);
+            frontRightStick.rotation.z = Math.PI / 4;
+            frontRightStick.position.x = 0.12;
+            frontRightStick.position.y = -0.12;
+            const frontLeftStick = new THREE.Mesh(stickGeometry, stickFrontMaterial);
+            frontLeftStick.rotation.z = - Math.PI / 4;
+            frontLeftStick.position.x = 0.12;
+            frontLeftStick.position.y = 0.12;
+            const backRightStick = new THREE.Mesh(stickGeometry, stickBackMaterial);
+            backRightStick.rotation.z = 3 * Math.PI / 4;
+            backRightStick.position.x = -0.12;
+            backRightStick.position.y = -0.12;
+            const backLeftStick = new THREE.Mesh(stickGeometry, stickBackMaterial);
+            backLeftStick.rotation.z = - 3 * Math.PI / 4;
+            backLeftStick.position.x = -0.12;
+            backLeftStick.position.y = 0.12;
+
+            quadrotor.add(frontRightStick);
+            quadrotor.add(frontLeftStick);
+            quadrotor.add(backRightStick);
+            quadrotor.add(backLeftStick);
+
+            // quad's body
+            const bodyGeom = new THREE.BoxGeometry(0.11, 0.11, 0.11);
+            const bodyMat = new THREE.MeshBasicMaterial( {color: 0xaaaa00} );
+            const body = new THREE.Mesh( bodyGeom, bodyMat );
+            quadrotor.add(body);
+
+            // local axis
+            const stickLocalAxisGeom = new THREE.CylinderGeometry(0.01, 0.01, 1.0);
+            const stickLocalAxisXMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const stickLocalAxisYMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const stickLocalAxisZMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+
+            const stickLocalAxisX = new THREE.Mesh(stickLocalAxisGeom, stickLocalAxisXMat);
+            stickLocalAxisX.rotation.z = Math.PI / 2;
+            stickLocalAxisX.position.x = 0.5;
+            const stickLocalAxisY = new THREE.Mesh(stickLocalAxisGeom, stickLocalAxisYMat);
+            stickLocalAxisY.rotation.z = Math.PI;
+            stickLocalAxisY.position.y = 0.5;
+            const stickLocalAxisZ = new THREE.Mesh(stickLocalAxisGeom, stickLocalAxisZMat);
+            stickLocalAxisZ.rotation.x = Math.PI / 2;
+            stickLocalAxisZ.position.z = 0.5;
+
+            quadrotor.add(stickLocalAxisX);
+            quadrotor.add(stickLocalAxisY);
+            quadrotor.add(stickLocalAxisZ);
+
+            // Create motors (small spheres at each end)
+            const motorGeometry = new THREE.SphereGeometry(0.07, 32, 32);
+            const motorMaterials = [
+                new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+                new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+                new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+                new THREE.MeshBasicMaterial({ color: 0x0000ff })
+            ]
+            const motorPositions = [
+                { x: 0.18, y: -0.18, z: 0.0 },  // M1
+                { x: -0.18, y: -0.18, z: 0.0 }, // M2
+                { x: -0.18, y: 0.18, z: 0.0 }, // M3
+                { x: 0.18, y: 0.18, z: 0.0 } // M4
+            ];
+            for (let i = 0; i < 4; i++) {
+                let pos = motorPositions[i];
+                let mat = motorMaterials[i];
+                const motor = new THREE.Mesh(motorGeometry, mat);
+                motor.position.set(pos.x, pos.y, pos.z);
+                quadrotor.add(motor);
+            }
+
+            scene.add(quadrotor);
+
+            // Axes (Red X, Green Y, Blue Z)
+            axesHelper = new THREE.AxesHelper(3);
+            scene.add(axesHelper);
+        }
+
+        // Update the quadrotor's orientation based on roll, pitch, and yaw
+        function updateOrientation() {
+            quadrotor.rotation.set(roll, pitch, yaw);
+        }
+
+        // Animate the scene
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update the quadrotor's orientation based on IMU data
+            updateOrientation();  
+
+            // Update the controls (camera) based on mouse movement
+            controls.update();
+
+            renderer.render(scene, camera);
+        }
+
+        function getColorFromValue(value) {
+            
+            color = new THREE.Color();
+            if (value >= 0.0 && value <= 10.0) {
+                color.setRGB(0.0, 0.0, 0.3);
+            } else if (value > 10.0 && value <= 20.0) {
+                color.setRGB(0.0, 0.0, 0.7);
+            } else if (value > 20.0 && value <= 30.0) {
+                color.setRGB(0.0, 0.0, 1.0);
+            } else if (value > 30.0 && value <= 40.0) {
+                color.setRGB(0.1, 0.1, 0.0);
+            } else if (value > 40.0 && value <= 50.0) {
+                color.setRGB(0.4, 0.3, 0.0);
+            } else if (value > 50.0 && value <= 60.0) {
+                color.setRGB(0.7, 0.5, 0.0);
+            } else if (value > 60.0 && value <= 70.0) {
+                color.setRGB(0.9, 0.7, 0.0);
+            } else if (value > 70.0 && value <= 80.0) {
+                color.setRGB(1.0, 1.0, 0.0);
+            } else if (value > 60.0 && value <= 70.0) {
+                color.setRGB(0.4, 0.0, 0.0);
+            } else if (value > 70.0 && value <= 80.0) {
+                color.setRGB(0.6, 0.0, 0.0);
+            } else if (value > 80.0 && value <= 90.0) {
+                color.setRGB(0.8, 0.0, 0.0);
+            } else if (value > 90.0 && value <= 100.0) {
+                color.setRGB(1.0, 0.0, 0.0);
+            }
+
+            return color;
+        }
+        
+
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        // Update charts with real-time data
+        socket.on('tcp-data', (data) => {
+            if (data.current_and_target_angles) {
+                console.log("data.current_and_target_angles");
+                roll = data.current_and_target_angles.roll_cur;
+                pitch = data.current_and_target_angles.pitch_cur;
+                yaw = 0.0;
+            }
+            if (data.motor_values) {
+                console.log("data.motor_values");
+                console.log(data.motor_values['M1']);
+                console.log(data.motor_values['M2']);
+                console.log(data.motor_values['M3']);
+                console.log(data.motor_values['M4']);
+                let a = getColorFromValue(data.motor_values['M1']);
+                let b = getColorFromValue(data.motor_values['M2']);
+                let c = getColorFromValue(data.motor_values['M3']);
+                let d = getColorFromValue(data.motor_values['M4']);
+                console.log(a);
+                console.log(b);
+                console.log(c);
+                console.log(d);
+
+                quadrotor.children[8].material.color.set(a);
+                quadrotor.children[9].material.color.set(b);
+                quadrotor.children[10].material.color.set(c);
+                quadrotor.children[11].material.color.set(d);
+            }
+        });
+
+        // Initialize the scene
+        init();
+
+    </script>
+</body>
+</html>

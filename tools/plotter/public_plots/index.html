@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Data Visualization</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #charts-container {
+            height: 300px;
+            display: grid;
+            /* Here is a whitespace too much after "1" */
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+    <!-- <link rel="stylesheet" type="text/css" href="styles.css"> -->
+</head>
+<body>
+    <button id="toggle-btn">Start/Stop</button>
+    <div id="charts-container">
+        <canvas id="rc-chart"></canvas>
+        <canvas id="imu-chart"></canvas>
+        <canvas id="current-target-angles-chart"></canvas>
+        <canvas id="motor-chart"></canvas>
+        <canvas id="frequency-chart"></canvas>
+    </div>
+    <script>
+        const socket = io();
+        let plotting = true;
+
+        document.getElementById('toggle-btn').addEventListener('click', () => {
+            plotting = !plotting;
+            document.getElementById('toggle-btn').textContent = plotting ? 'Stop' : 'Start';
+        });
+
+        // Create chart instances
+        const createChart = (ctx, label, dataLabels) => {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: dataLabels.map((label, index) => ({
+                        label,
+                        data: [],
+                        borderColor: `hsl(${index * 60}, 70%, 50%)`,
+                        backgroundColor: `hsl(${index * 60}, 70%, 50%, 0.1)`,
+                        borderWidth: 2
+                    }))
+                },
+                options: {
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            display: false,
+                            text: 'TESTX'
+                        },
+                        y: {
+                            beginAtZero: true,
+                            display: true,
+                            text: 'TESTY'
+                        }
+                    },
+                    responsive: true,
+                    animation: true
+                }
+            });
+        };
+
+        const rcChart = createChart(
+            document.getElementById('rc-chart').getContext('2d'),
+            'RC Inputs', ['RC1', 'RC2', 'RC3', 'RC4', 'RC5', 'RC6']);
+        const imuChart = createChart(
+            document.getElementById('imu-chart').getContext('2d'),
+            'IMU Values', ['acc_x', 'acc_y', 'acc_z', 'gyro_x', 'gyro_y', 'gyro_z']);
+        const currentAnglesChart = createChart(
+            document.getElementById('current-target-angles-chart').getContext('2d'),
+            'Current and Target Angles', ['Roll_cur', 'Pitch_cur', 'Roll_tar', 'Pitch_tar', 'Yaw_tar']);
+        const motorChart = createChart(
+            document.getElementById('motor-chart').getContext('2d'),
+            'Motor Values', ['M1', 'M2', 'M3', 'M4']);
+        const freqChart = createChart(
+            document.getElementById('frequency-chart').getContext('2d'),
+            'Frequency HZ', ['Freq HZ']);
+        const start = Date.now();
+        // Update charts with real-time data
+        socket.on('tcp-data', (data) => {
+            if (!plotting) return;
+
+            const updateChart = (chart, values) => {
+                const millis = Date.now() - start;
+                chart.data.labels.push(millis / 1000);
+                chart.data.datasets.forEach((dataset, index) => {
+                    dataset.data.push(values[index] !== undefined ? values[index] : null);
+                });
+
+                if (chart.data.labels.length > 50) {
+                    chart.data.labels.shift(); // Remove the oldest label
+
+                    chart.data.datasets.forEach((dataset) => {
+                        dataset.data.shift(); // Remove the oldest data point
+                    });
+                }
+                console.log(chart.data.labels.length);
+
+                chart.update('none');
+            };
+
+            if (data.rc_inputs) {
+                console.log("data.rc_inputs");
+                updateChart(rcChart, Object.values(data.rc_inputs));
+            }
+            if (data.imu_values) {
+                console.log("data.imu_values");
+                updateChart(imuChart, Object.values(data.imu_values));
+            }
+            if (data.current_and_target_angles) {
+                console.log("data.current_and_target_angles");
+                const anglesInDegrees = Object.values(data.current_and_target_angles).map(angle => angle * (180 / Math.PI));
+                console.log(anglesInDegrees);
+                updateChart(
+                    currentAnglesChart,
+                    anglesInDegrees);
+            }
+            if (data.motor_values) {
+                console.log("data.motor_values");
+                updateChart(motorChart, Object.values(data.motor_values));
+            }
+            if (data.frequency) {
+                console.log("data.frequency");
+                updateChart(freqChart, Object.values(data.frequency));
+            }
+        });
+    </script>
+</body>
+</html>
